@@ -2,5 +2,5 @@ opencv-python
 streamlit
 tensorflow
 tensorflow_hub
-pillow
+Pillow
 random

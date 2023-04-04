@@ -1,6 +1,4 @@
 import cv2
-import tensorflow as tf
-import tensorflow_hub as hub
 import streamlit as st
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -29,19 +27,6 @@ st.subheader("OpenCV")
 st.write("OpenCV's Cascade Classifier is a powerful tool for detecting objects in images and videos. It is particularly useful for face detection, which involves locating and identifying human faces in images and videos. The cascade classifier is a machine learning algorithm that is trained to identify certain features of an object, such as the edges of a face, and use these features to identify the object.")
 st.write("One of the advantages of the cascade classifier and detectMultiScale functions is that they are fast and efficient, allowing for real-time face detection in video streams. This makes them ideal for applications such as security systems and video conferencing, where real-time detection is essential.")
 st.write("The detectMultiScale function in OpenCV is used to apply the cascade classifier to an image or video. It works by scanning the image or video at different scales, looking for areas that match the features identified by the classifier. When a match is found, the function returns a set of coordinates that define the location of the object in the image or video.")
-
-# Image upload
-st.subheader("Upload your image to use here")
-image_file = st.file_uploader("You can replace the image with one of your images here.", type=['jpg', 'png', 'jpeg'])
-if image_file is None:
-    original_image = default_img
-    numpy_image = np.array(original_image)
-else:
-    original_image = Image.open(image_file)
-    numpy_image = np.array(original_image)
-
-# Grayscale for comp vision
-gray = cv2.cvtColor(numpy_image, cv2.COLOR_BGR2GRAY)
 
 st.subheader("CODE")
 st.write("After we import the necessary packages let's setup a function to obtain the data from an image path on the web. If you are uploading an image, you can skip this.")
@@ -92,6 +77,19 @@ if faces is not None:
 ''')
 st.write("We can take the output we get for faces and draw boxes or anything else you need, cropping them out, etc.")
 
+# Image upload
+st.subheader("Upload your image to use here for OpenCV only")
+image_file = st.file_uploader("You can replace the image with one of your images here.", type=['jpg', 'png', 'jpeg'])
+if image_file is None:
+    original_image = default_img
+    numpy_image = np.array(original_image)
+else:
+    original_image = Image.open(image_file)
+    numpy_image = np.array(original_image)
+
+# Grayscale for comp vision
+gray = cv2.cvtColor(numpy_image, cv2.COLOR_BGR2GRAY)
+
 st.write("Try changing the args for detectMultiScale below and see how it alters the output.")
 
 # Columns set locations
@@ -122,12 +120,6 @@ if faces is not None:
         st.image(img.crop((x, y, (x+w), (y+h))))
 
 # Tensflow Object Detection ------------------------------------------------------------------------------------------
-
-def tf_preproc(image_np):
-    input_tensor = tf.convert_to_tensor(image_np)
-    input_tensor = input_tensor[tf.newaxis, ...]
-    input_tensor = input_tensor[:, :, :, :3]
-    return input_tensor
 
 st.subheader("Object Detection with Tensorflow")
 st.write("TensorFlow is a popular open-source framework for building and training machine learning models, including those used in object detection. TensorFlow's Object Detection API is a collection of pre-trained models that can be fine-tuned for specific applications, as well as tools for training new models from scratch.")
@@ -222,70 +214,8 @@ for i in range(max_objects):
 
 label_image
 ''')
-
-st.write("Check it out below.")
-
-# Cache the model and process img, seperate these
-@st.cache_data
-def model_hub(_img):
-    detector = hub.load("https://tfhub.dev/tensorflow/centernet/hourglass_512x512/1")
-    output = detector(tf_preproc(img))
-    return output
-
-# Call on image and get outputs
-detector_output = model_hub(original_image)
-class_ids = tf.squeeze(detector_output["detection_classes"])
-scores = tf.squeeze(detector_output["detection_scores"])
-boxes = tf.squeeze(detector_output["detection_boxes"])
-
-class_names = []
-
-with open('tf_classes.txt', 'r') as f:
-    input_lines = f.readlines()
-    for line in input_lines:
-        line = line.strip()
-        if line.startswith("display_name:"):
-            class_names.append(line.split()[1].replace('"', ''))
-
-# class_names and class_ids are 1 off from each other
-max_objects = st.slider("Number of Objects to Find", max_value=20, min_value=1, value=5)
-
-# Convert to numpy arrays and display img
-boxes = boxes.numpy()
-tf_image = np.array(original_image)
-
-colors_picked = []
-
-# Draw boxes
-for i in range(max_objects):
-    for j in range(len(boxes[i])):
-        if j == 0:
-            boxes[i][j] = round(boxes[i][j] * original_image.height)
-        else:
-            boxes[i][j] = round(boxes[i][j] * original_image.width)
-    x = int(boxes[i][0])
-    y = int(boxes[i][1])
-    w = int(boxes[i][2])
-    h = int(boxes[i][3])
-    
-    cv2.rectangle(tf_image, (y, x), (h, w), random.choice(color)["rgb"], 2)
-
-label_image = Image.fromarray(tf_image)
-font = ImageFont.FreeTypeFont("AtariST8x16SystemFont.ttf", size=30)
-
-for i in range(max_objects):
-    for j in range(len(boxes[i])):
-        x = int(boxes[i][0])
-        y = int(boxes[i][1])
-        w = int(boxes[i][2])
-        h = int(boxes[i][3])
-    string = " " + class_names[(int(class_ids[i])) - 1] + " | " + str(round(float(scores[i]), 3)) + " %"
-    I1 = ImageDraw.Draw(label_image)
-    I1.rounded_rectangle([y, x-32, y+260, x+4], fill=(30, 30, 30), radius=5)
-    I1.text((y, x-30), string, font=font, fill=(235, 235, 235))
-
 # Image with tf labels on it
-st.image(label_image)
+st.image("Obj_Det_TFHUB.jpg")
 
 # Image Segmentation------------------------------------------------------------------------------
 
@@ -317,49 +247,31 @@ def detect_seg(image, model):
     features = model.get_features(img)
     return predictions, features
 ''')
-
+st.write("Using the load method, we setup the model. We are returned 202 predictions for each pixel in the H x W, so we get `predictions.shape = (756, 1008, 202)`")
 st.code('''# Define the model
 model = hub.load('https://tfhub.dev/google/HRNet/coco-hrnetv2-w48/1')
 
 # Get preds and features
 predictions, features = detect_seg(original_image, model)
-predictions.shape
 ''')
 
-# Create a mask of main object
-def create_mask(pred_mask):
-  pred_mask = tf.math.argmax(pred_mask, axis=-1)
-  pred_mask = pred_mask[..., tf.newaxis]
-  return pred_mask[0]
 
-@st.cache_data
-def detect_seg(_image):
-    model = hub.load('https://tfhub.dev/google/HRNet/coco-hrnetv2-w48/1')
-    img = tf.cast(tf_preproc(_image), tf.float32)/255.0
-    # Predictions will have shape (batch_size, h, w, output_classes=134+1)
-    # Note: an additional class is added for the background.
-    predictions = model.predict(img)
-    # Features will have shape (batch_size, h/4, w/4, 720)
-    features = model.get_features(img)
-    return predictions, features
 
-# Get preds and features
-predictions, features = detect_seg(original_image)
-st.write(predictions.shape)
-
-st.write("Lets look as some of the information we are returned by the model and how we can use it.")
+st.write("Lets transform the predictions data into a few interesting things. First, create_mask gets the most confidents category and labels the pixel. Then, we need a numpy array instead of a tensor, so we wrap our create_mask call in `np.array()`.")
 
 st.code('''# Create the array from mask and show image
 pred_img_array = np.array(create_mask(predictions))
-pred_img_array
 pred_img_array.shape
+pred_img_array
 ''')
-
-# Create the array from mask and show image
-pred_img_array = np.array(create_mask(predictions))
-st.image(pred_img_array)
-st.write(pred_img_array.shape)
-
+st.write("The shape after numpy conversion.")
+st.code('''
+    Output:
+        (1, 756, 1008, 202)
+''')
+st.write("The image output.")
+st.image("pred_img_array_mask.jpg")
+st.write("The first few unique categories and their pixel counts.")
 st.code('''# Visualize unique counts 
 unique, counts = np.unique(pred_img_array, return_counts=True)
 max_preds = 4
@@ -368,46 +280,48 @@ for num_preds in range(max_preds):
     print(counts[num_preds])
     print("-------------------")
 ''')
-
-# Get unique counts 
-unique, counts = np.unique(pred_img_array, return_counts=True)
-max_preds = 3
-for num_preds in range(max_preds):
-    st.write(unique[num_preds])
-    st.write(counts[num_preds])
-    st.write("---------------------")
-
+st.write("2 seems to be the winner, but let's make sure we have the right information!")
+st.code('''
+    Output:
+        2
+        430644
+        -------------------
+        10
+        32602
+        -------------------
+        43
+        2680
+        -------------------
+''')
+st.write("Setting `main_obj` equal to `np.bincount(unique).argmax()` will ensure we choose the highest pixel count. We are choosing the largest detected object in the image, doing it this way. The people in this photo were detected as one object. Do you know of a technology that would detect them individually? Hint: Semantic vs Instance")
 st.code('''# Find the obj with the highest count, Biggest on screen
 main_obj = np.bincount(unique).argmax()
 main_obj
 ''')
-
-# Find the obj with the highest count, Biggest on screen
-main_obj = np.bincount(unique).argmax()
-st.write(main_obj)
-
-st.code('''# Visualize preds
+st.write("It was category 2. Can you find out what category that represents for this model?")
+st.code('''
+    Output:
+        2
+''')
+st.write("Changing the shape to get just 2 axes.")
+st.code('''# Squeeze
 sq_arr = np.squeeze(pred_img_array)
 sq_arr.shape
 ''')
-
-# Visualize preds
-sq_arr = np.squeeze(pred_img_array)
-st.write(sq_arr.shape)
-
+st.code('''
+    Output:
+        (756, 1008)
+''')
+st.write("Here we loop through the array and set the value depending on if it was the la")
 st.code('''# Cutout main object by change it to 255 and everything else to 0
 sq_arr[sq_arr != main_obj] = 0
 sq_arr[sq_arr == main_obj] = 255
 
 sq_arr
 ''')
-
-# Cutout main object by change it to 255 and everything else to 0
-sq_arr[sq_arr != main_obj] = 0
-sq_arr[sq_arr == main_obj] = 255
-
-st.image(sq_arr)
-
+st.write("This is just the grayscale with the object being 255 and the rest 0. Let's use it to get transparency involved.")
+st.image("cut_out_img.jpg")
+st.write("We can use the array to build a RGBA image. Just stack the arrays and change the elements' type to uint8. Then `Image.fromarray()` will take it, and you can display a white cut-out of the object.")
 st.code('''# Create a mask image with transparent backkground
 rgba = np.dstack((sq_arr, sq_arr, sq_arr, sq_arr))
 
@@ -416,25 +330,15 @@ cut_out = rgba.astype(np.uint8)
 
 Image.fromarray(cut_out)
 ''')
-
-# Create a mask image with transparent backkground
-rgba = np.dstack((sq_arr, sq_arr, sq_arr, sq_arr))
-
-# Change type to uint8
-cut_out = rgba.astype(np.uint8)
-
-st.image(Image.fromarray(cut_out))
-
+st.image("cut_out_img_transparent_bg.png")
+st.write("We can even add the channel array to the rgb to make a rgba, cut_out, of the original image.")
 st.code('''# Create overlay
 numpy_image_og = np.array(original_image)
 overlay = np.dstack((numpy_image_og, sq_arr))
 
 overlay
 ''')
+st.write("How can we combine these computer vision methods to make better tools? Can you find any different/better image segmentation models than these? Hint: Yes!")
+st.image("sample_cut_out.png")
 
-# Create overlay
-numpy_image_og = np.array(original_image)
-overlay = np.dstack((numpy_image_og, sq_arr))
-
-st.image(overlay)
 

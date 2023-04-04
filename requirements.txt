@@ -1,5 +1,3 @@
 opencv-python-headless
 streamlit
-tensorflow
-tensorflow_hub
 Pillow
